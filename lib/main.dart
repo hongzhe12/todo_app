@@ -9,8 +9,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: const HomeScreen(),
+    return const MaterialApp(
+      home: HomeScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -50,19 +50,10 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _addTask() {
-    if (_controller.text.isNotEmpty) {
-      setState(() {
-        todoList.add(_controller.text);
-        _controller.clear();
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(title: Text('待办事项')),
+        appBar: AppBar(title: const Text('待办事项')),
         body: Column(
           children: [
             Expanded(
@@ -88,12 +79,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: Icon(Icons.edit, color: Colors.white),
+                            icon: const Icon(Icons.edit, color: Colors.white),
                             onPressed: () => _editItem(index),
                           ),
                           const SizedBox(width: 10),
                           IconButton(
-                            icon: Icon(Icons.delete, color: Colors.white),
+                            icon: const Icon(Icons.delete, color: Colors.white),
                             onPressed: () =>
                                 setState(() => todoList.removeAt(index)),
                           ),
