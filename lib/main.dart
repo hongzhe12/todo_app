@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'utils/api_client.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -24,20 +26,44 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<String> todoList = ['学习Flutter', '写代码', '休息'];
+  final ApiClient _apiClient = ApiClient();
+  List<String> todoList = [];
   final TextEditingController _controller = TextEditingController();
-  int _editingIndex = -1; // 新增
+  int _editingIndex = -1;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodos();
+  }
+
+  Future<void> _loadTodos() async {
+    try {
+      final todos = await _apiClient.fetchTodos();
+      setState(() {
+        todoList = todos
+            .map((item) => (item['title'] ?? '').toString())
+            .where((title) => title.isNotEmpty)
+            .toList();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
 
   void _submit() {
     if (_controller.text.isEmpty) return;
     setState(() {
       if (_editingIndex == -1) {
-        // 添加
         todoList.add(_controller.text);
       } else {
-        // 编辑
         todoList[_editingIndex] = _controller.text;
-        _editingIndex = -1; // 重置编辑状态
+        _editingIndex = -1;
       }
       _controller.clear();
     });
@@ -51,7 +77,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('待办事项')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
         appBar: AppBar(title: const Text('待办事项')),
         body: Column(
