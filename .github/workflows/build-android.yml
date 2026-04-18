@@ -1,0 +1,50 @@
+name: Build Flutter Release APK 
+
+on:
+  push:
+    branches: [ main, master ]  # 触发条件：推送到主分支时构建
+  workflow_dispatch:  # 允许手动触发构建
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 使用Ubuntu环境，速度快且免费
+
+    steps:
+      - name: Checkout code  # 拉取代码
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter  # 配置Flutter环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'  # 推荐稳定版
+          channel: stable
+          cache: true  # 缓存依赖，加速构建
+
+      - name: Install dependencies  # 安装项目依赖
+        run: flutter pub get
+
+      - name: Decode keystore  # 解密密钥库（关键步骤）
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/upload-keystore.jks
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=../upload-keystore.jks" >> android/key.properties
+
+      - name: Build release APK  # 构建发布版APK
+        run: flutter build apk --release --split-per-abi  # 按CPU架构拆分，体积更小
+
+      - name: Upload APK artifacts  # 上传APK到构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apks
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30  # 保留30天
+
+      - name: Release APK  # 可选：发布到GitHub Releases（标签触发时）
+        if: startsWith(github.ref, 'refs/tags/v')  # 仅当推送标签（如v1.0.0）时执行
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/app/outputs/flutter-apk/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动生成，无需手动添加
