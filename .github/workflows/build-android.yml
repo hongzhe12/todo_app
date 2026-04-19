@@ -4,7 +4,12 @@ on:
   push:
     branches: [ main, master ]
     tags: [ 'v*' ]               # 当推送 v 开头的标签时也会触发
-  workflow_dispatch:              # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '要发布的标签名，例如 v1.0.4；留空则在 tag 触发时使用当前 tag'
+        required: false
+        type: string
 
 # 关键：授予创建 Release 和上传附件的权限
 permissions:
@@ -17,6 +22,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -39,6 +46,18 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            echo "tag_name=${{ github.event.inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag_name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_name=" >> "$GITHUB_OUTPUT"
+          fi
+
       # 调试：列出生成的 APK 文件（可选，便于排查）
       - name: List APK files
         run: ls -la build/app/outputs/flutter-apk/
@@ -50,15 +69,22 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
-      # 关键：仅当推送 v 开头的标签时才创建 GitHub Release
+      # 关键：用 GitHub CLI 创建/更新 Release，并附带 APK 文件
       - name: Publish to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          artifacts: build/app/outputs/flutter-apk/app-release.apk
-          allowUpdates: true
-          artifactErrorsFailBuild: true
-          generateReleaseNotes: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.meta.outputs.tag_name != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG_NAME="${{ steps.meta.outputs.tag_name }}"
+          APK_FILE="build/app/outputs/flutter-apk/app-release.apk"
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "$APK_FILE" --clobber
+          else
+            gh release create "$TAG_NAME" \
+              --target "${{ github.sha }}" \
+              --title "$TAG_NAME" \
+              --generate-notes \
+              "$APK_FILE"
+          fi
