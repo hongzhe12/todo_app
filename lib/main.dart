@@ -14,21 +14,81 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
-      home: HomeScreen(),
+      home: AppShell(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<AppShell> createState() => _AppShellState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  final ApiClient _apiClient = ApiClient();
+class _AppShellState extends State<AppShell> {
+  int _selectedIndex = 0;
+  String _baseUrl = 'http://127.0.0.1:8000/o/app';
+
+  void _updateBaseUrl(String value) {
+    final normalized = value.trim();
+    if (normalized.isEmpty || normalized == _baseUrl) return;
+
+    setState(() {
+      _baseUrl = normalized;
+      _selectedIndex = 0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      TodoPage(baseUrl: _baseUrl),
+      SettingsPage(
+        baseUrl: _baseUrl,
+        onSave: _updateBaseUrl,
+      ),
+    ];
+
+    return Scaffold(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: pages,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.checklist),
+            label: '待办',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: '设置',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TodoPage extends StatefulWidget {
+  const TodoPage({super.key, required this.baseUrl});
+
+  final String baseUrl;
+
+  @override
+  State<TodoPage> createState() => _TodoPageState();
+}
+
+class _TodoPageState extends State<TodoPage> {
+  late ApiClient _apiClient;
 
   List<Map<String, dynamic>> _todoList = [];
   final TextEditingController _controller = TextEditingController();
@@ -41,7 +101,21 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _apiClient = ApiClient(baseUrl: widget.baseUrl);
     _loadTodos();
+  }
+
+  @override
+  void didUpdateWidget(covariant TodoPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.baseUrl != widget.baseUrl) {
+      _apiClient = ApiClient(baseUrl: widget.baseUrl);
+      _controller.clear();
+      _editingId = null;
+      _errorMessage = null;
+      _loading = true;
+      _loadTodos();
+    }
   }
 
   Future<void> _loadTodos() async {
@@ -202,6 +276,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const title = '待办事项';
+
     if (_loading) {
       return Scaffold(
         appBar: AppBar(title: const Text('待办事项')),
@@ -211,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
         appBar: AppBar(
-          title: const Text('待办事项'),
+          title: Text(title),
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -355,5 +431,100 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ));
+  }
+}
+
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({
+    super.key,
+    required this.baseUrl,
+    required this.onSave,
+  });
+
+  final String baseUrl;
+  final ValueChanged<String> onSave;
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.baseUrl);
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.baseUrl != widget.baseUrl &&
+        _controller.text != widget.baseUrl) {
+      _controller.text = widget.baseUrl;
+    }
+  }
+
+  void _save() {
+    final value = _controller.text.trim();
+    if (value.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入 baseUrl')),
+      );
+      return;
+    }
+
+    widget.onSave(value);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('baseUrl 已更新')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('设置')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '接口地址',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'http://127.0.0.1:8000/o/app',
+              ),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '修改后会立即切换到新的接口地址。',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _save,
+                child: const Text('保存并切换'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

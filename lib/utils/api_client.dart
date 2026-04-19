@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  ApiClient({this.baseUrl = 'http://127.0.0.1:8000/o/app'});
+  ApiClient({required this.baseUrl});
 
   final String baseUrl;
   static const Duration _requestTimeout = Duration(seconds: 3);
