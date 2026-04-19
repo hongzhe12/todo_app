@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -6,12 +7,17 @@ class ApiClient {
   ApiClient({this.baseUrl = 'http://127.0.0.1:8000/o/app'});
 
   final String baseUrl;
+  static const Duration _requestTimeout = Duration(seconds: 3);
 
   String get _todosEndpoint => '$baseUrl/api/todos/';
 
   Future<List<Map<String, dynamic>>> fetchTodos() async {
     final uri = Uri.parse(_todosEndpoint);
-    final response = await http.get(uri);
+    final response = await http
+        .get(uri)
+        .timeout(_requestTimeout, onTimeout: () {
+      throw TimeoutException('请求超时，请检查网络后重试');
+    });
 
     if (response.statusCode != 200) {
       throw Exception('加载失败: ${response.statusCode}');
@@ -32,7 +38,9 @@ class ApiClient {
       Uri.parse(_todosEndpoint),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'title': title, 'completed': completed}),
-    );
+    ).timeout(_requestTimeout, onTimeout: () {
+      throw TimeoutException('请求超时，请检查网络后重试');
+    });
 
     if (response.statusCode != 201) {
       throw Exception('新增失败: ${response.statusCode}');
@@ -55,7 +63,9 @@ class ApiClient {
       Uri.parse('$_todosEndpoint$id/'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(payload),
-    );
+    ).timeout(_requestTimeout, onTimeout: () {
+      throw TimeoutException('请求超时，请检查网络后重试');
+    });
 
     if (response.statusCode != 200) {
       throw Exception('更新失败: ${response.statusCode}');
@@ -66,7 +76,11 @@ class ApiClient {
   }
 
   Future<void> deleteTodo(int id) async {
-    final response = await http.delete(Uri.parse('$_todosEndpoint$id/'));
+    final response = await http
+        .delete(Uri.parse('$_todosEndpoint$id/'))
+        .timeout(_requestTimeout, onTimeout: () {
+      throw TimeoutException('请求超时，请检查网络后重试');
+    });
 
     if (response.statusCode != 204) {
       throw Exception('删除失败: ${response.statusCode}');

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'utils/api_client.dart';
@@ -46,11 +48,19 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final todos = await _apiClient.fetchTodos();
 
+      if (!mounted) return;
+
       setState(() {
         _todoList = todos;
         _errorMessage = null;
       });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = '请求超时，请检查网络后重试';
+      });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
       });
@@ -81,6 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _controller.clear();
       _editingId = null;
       await _loadTodos();
+    } on TimeoutException {
+      _showError('请求超时，请检查网络后重试');
     } catch (e) {
       _showError(e.toString());
     } finally {
@@ -130,6 +142,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       await _apiClient.updateTodo(id, completed: value);
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _todoList[index] = {
+            ..._todoList[index],
+            'completed': previousValue,
+          };
+        });
+      }
+      _showError('请求超时，请检查网络后重试');
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -159,6 +181,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       await _loadTodos();
+    } on TimeoutException {
+      _showError('请求超时，请检查网络后重试');
     } catch (e) {
       _showError(e.toString());
     }
@@ -240,10 +264,32 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: _todoList.isEmpty
                   ? Center(
-                      child: Text(
-                        _errorMessage == null ? '暂无待办' : _errorMessage!,
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                      child: _errorMessage == null
+                          ? const Text(
+                              '暂无待办',
+                              style: TextStyle(fontSize: 16),
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.wifi_off,
+                                  size: 42,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: _loadTodos,
+                                  child: const Text('重试'),
+                                ),
+                              ],
+                            ),
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
