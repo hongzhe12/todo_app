@@ -3,19 +3,21 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'app_http_client.dart';
+
 class ApiClient {
-  ApiClient({required this.baseUrl});
+  ApiClient({required this.baseUrl, http.Client? client})
+      : _client = client ?? createAppHttpClient();
 
   final String baseUrl;
+  final http.Client _client;
   static const Duration _requestTimeout = Duration(seconds: 3);
 
   String get _todosEndpoint => '$baseUrl/api/todos/';
 
   Future<List<Map<String, dynamic>>> fetchTodos() async {
     final uri = Uri.parse(_todosEndpoint);
-    final response = await http
-        .get(uri)
-        .timeout(_requestTimeout, onTimeout: () {
+    final response = await _client.get(uri).timeout(_requestTimeout, onTimeout: () {
       throw TimeoutException('请求超时，请检查网络后重试');
     });
 
@@ -34,7 +36,7 @@ class ApiClient {
     required String title,
     bool completed = false,
   }) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse(_todosEndpoint),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'title': title, 'completed': completed}),
@@ -59,7 +61,7 @@ class ApiClient {
     if (title != null) payload['title'] = title;
     if (completed != null) payload['completed'] = completed;
 
-    final response = await http.patch(
+    final response = await _client.patch(
       Uri.parse('$_todosEndpoint$id/'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(payload),
@@ -76,14 +78,16 @@ class ApiClient {
   }
 
   Future<void> deleteTodo(int id) async {
-    final response = await http
-        .delete(Uri.parse('$_todosEndpoint$id/'))
-        .timeout(_requestTimeout, onTimeout: () {
+    final response = await _client.delete(Uri.parse('$_todosEndpoint$id/')).timeout(_requestTimeout, onTimeout: () {
       throw TimeoutException('请求超时，请检查网络后重试');
     });
 
     if (response.statusCode != 204) {
       throw Exception('删除失败: ${response.statusCode}');
     }
+  }
+
+  void dispose() {
+    _client.close();
   }
 }

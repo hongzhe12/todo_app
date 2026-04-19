@@ -29,7 +29,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
-  String _baseUrl = 'http://127.0.0.1:8000/o/app';
+  String _baseUrl = 'https://192.168.0.11/o/app';
 
   void _updateBaseUrl(String value) {
     final normalized = value.trim();
@@ -270,6 +270,7 @@ class _TodoPageState extends State<TodoPage> {
 
   @override
   void dispose() {
+    _apiClient.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -505,7 +506,7 @@ class _SettingsPageState extends State<SettingsPage> {
               controller: _controller,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                hintText: 'http://127.0.0.1:8000/o/app',
+                hintText: 'https://192.168.0.11/o/app',
               ),
               keyboardType: TextInputType.url,
             ),
