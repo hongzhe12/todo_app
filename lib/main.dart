@@ -5,66 +5,64 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'utils/api_client.dart';
 
-void main() {
-  runApp(const MyApp());
+const String defaultBaseUrl = 'https://192.168.0.11/o/app';
+const String baseUrlStorageKey = 'baseUrl';
+const String timeoutErrorMessage = '请求超时，请检查网络后重试';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final prefs = await SharedPreferences.getInstance();
+  final saved = prefs.getString(baseUrlStorageKey)?.trim();
+  final initialBaseUrl =
+      (saved == null || saved.isEmpty) ? defaultBaseUrl : saved;
+
+  runApp(MyApp(initialBaseUrl: initialBaseUrl));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.initialBaseUrl});
+
+  final String initialBaseUrl;
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: AppShell(),
+    return MaterialApp(
+      home: AppShell(initialBaseUrl: initialBaseUrl),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, required this.initialBaseUrl});
+
+  final String initialBaseUrl;
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  static const String _defaultBaseUrl = 'https://192.168.0.11/o/app';
-  static const String _baseUrlStorageKey = 'baseUrl';
-
   int _selectedIndex = 0;
-  String _baseUrl = _defaultBaseUrl;
+  late String _baseUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadBaseUrl();
-  }
-
-  Future<void> _loadBaseUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_baseUrlStorageKey);
-    final normalized = saved?.trim();
-    if (normalized == null || normalized.isEmpty || normalized == _baseUrl) {
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _baseUrl = normalized;
-    });
+    _baseUrl = widget.initialBaseUrl;
   }
 
   Future<void> _persistBaseUrl(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_baseUrlStorageKey, value);
+    await prefs.setString(baseUrlStorageKey, value);
   }
 
-  void _updateBaseUrl(String value) {
+  Future<void> _updateBaseUrl(String value) async {
     final normalized = value.trim();
     if (normalized.isEmpty || normalized == _baseUrl) return;
 
-    _persistBaseUrl(normalized);
+    await _persistBaseUrl(normalized);
     setState(() {
       _baseUrl = normalized;
       _selectedIndex = 0;
@@ -139,6 +137,7 @@ class _TodoPageState extends State<TodoPage> {
   void didUpdateWidget(covariant TodoPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.baseUrl != widget.baseUrl) {
+      _apiClient.dispose();
       _apiClient = ApiClient(baseUrl: widget.baseUrl);
       _controller.clear();
       _editingId = null;
@@ -146,6 +145,11 @@ class _TodoPageState extends State<TodoPage> {
       _loading = true;
       _loadTodos();
     }
+  }
+
+  String _errorText(Object error) {
+    if (error is TimeoutException) return timeoutErrorMessage;
+    return error.toString();
   }
 
   Future<void> _loadTodos() async {
@@ -158,15 +162,10 @@ class _TodoPageState extends State<TodoPage> {
         _todoList = todos;
         _errorMessage = null;
       });
-    } on TimeoutException {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = '请求超时，请检查网络后重试';
-      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = _errorText(e);
       });
     } finally {
       if (mounted) {
@@ -195,10 +194,8 @@ class _TodoPageState extends State<TodoPage> {
       _controller.clear();
       _editingId = null;
       await _loadTodos();
-    } on TimeoutException {
-      _showError('请求超时，请检查网络后重试');
     } catch (e) {
-      _showError(e.toString());
+      _showError(_errorText(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -244,28 +241,21 @@ class _TodoPageState extends State<TodoPage> {
       };
     });
 
+    void revertCompleted() {
+      if (!mounted) return;
+      setState(() {
+        _todoList[index] = {
+          ..._todoList[index],
+          'completed': previousValue,
+        };
+      });
+    }
+
     try {
       await _apiClient.updateTodo(id, completed: value);
-    } on TimeoutException {
-      if (mounted) {
-        setState(() {
-          _todoList[index] = {
-            ..._todoList[index],
-            'completed': previousValue,
-          };
-        });
-      }
-      _showError('请求超时，请检查网络后重试');
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _todoList[index] = {
-            ..._todoList[index],
-            'completed': previousValue,
-          };
-        });
-      }
-      _showError(e.toString());
+      revertCompleted();
+      _showError(_errorText(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -285,10 +275,8 @@ class _TodoPageState extends State<TodoPage> {
       }
 
       await _loadTodos();
-    } on TimeoutException {
-      _showError('请求超时，请检查网络后重试');
     } catch (e) {
-      _showError(e.toString());
+      _showError(_errorText(e));
     }
   }
 
@@ -311,7 +299,7 @@ class _TodoPageState extends State<TodoPage> {
 
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('待办事项')),
+        appBar: AppBar(title: const Text(title)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -407,7 +395,7 @@ class _TodoPageState extends State<TodoPage> {
                         final title = (item['title'] ?? '').toString();
                         final completed = item['completed'] == true;
                         final updatingCompleted =
-                          id != null && _updatingCompletedIds.contains(id);
+                            id != null && _updatingCompletedIds.contains(id);
 
                         return Card(
                           shape: RoundedRectangleBorder(
@@ -424,10 +412,10 @@ class _TodoPageState extends State<TodoPage> {
                                   onChanged: updatingCompleted
                                       ? null
                                       : (value) {
-                                    if (value != null) {
-                                      _toggleCompleted(item, value);
-                                    }
-                                  },
+                                          if (value != null) {
+                                            _toggleCompleted(item, value);
+                                          }
+                                        },
                                 ),
                                 Expanded(
                                   child: Text(
@@ -449,9 +437,8 @@ class _TodoPageState extends State<TodoPage> {
                                 IconButton(
                                   icon: const Icon(Icons.delete,
                                       color: Colors.white),
-                                  onPressed: id == null
-                                      ? null
-                                      : () => _deleteItem(id),
+                                  onPressed:
+                                      id == null ? null : () => _deleteItem(id),
                                 ),
                               ],
                             ),
@@ -473,7 +460,7 @@ class SettingsPage extends StatefulWidget {
   });
 
   final String baseUrl;
-  final ValueChanged<String> onSave;
+  final Future<void> Function(String) onSave;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -497,7 +484,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
     final value = _controller.text.trim();
     if (value.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -506,7 +493,7 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
-    widget.onSave(value);
+    await widget.onSave(value);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('baseUrl 已更新')),
     );
