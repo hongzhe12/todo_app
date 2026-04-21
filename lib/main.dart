@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'utils/api_client.dart';
 
@@ -28,13 +29,42 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  static const String _defaultBaseUrl = 'https://192.168.0.11/o/app';
+  static const String _baseUrlStorageKey = 'baseUrl';
+
   int _selectedIndex = 0;
-  String _baseUrl = 'https://192.168.0.11/o/app';
+  String _baseUrl = _defaultBaseUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBaseUrl();
+  }
+
+  Future<void> _loadBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_baseUrlStorageKey);
+    final normalized = saved?.trim();
+    if (normalized == null || normalized.isEmpty || normalized == _baseUrl) {
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _baseUrl = normalized;
+    });
+  }
+
+  Future<void> _persistBaseUrl(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_baseUrlStorageKey, value);
+  }
 
   void _updateBaseUrl(String value) {
     final normalized = value.trim();
     if (normalized.isEmpty || normalized == _baseUrl) return;
 
+    _persistBaseUrl(normalized);
     setState(() {
       _baseUrl = normalized;
       _selectedIndex = 0;
